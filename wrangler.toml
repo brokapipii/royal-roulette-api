@@ -11,7 +11,7 @@ database_id = "10134c6e-a6fa-4f7a-98a3-5b09f5e3010f"
 
 [vars]
 # Ganti dengan alamat Cloudflare Pages Anda agar hanya situs itu yang boleh memanggil API.
-ORIGIN = "*"
+ORIGIN = "https://royal-roulette-web.pages.dev"
 
 # Penyelesaian taruhan pemain yang sedang offline, tiap menit.
 [triggers]
