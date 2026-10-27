@@ -1,0 +1,17 @@
+name = "royal-roulette-api"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Database D1. database_id dibuat otomatis saat deploy (wrangler 4.45 atau lebih baru).
+# Jika gagal, buat manual: npx wrangler d1 create royal-roulette-db, lalu tambahkan database_id di bawah ini.
+[[d1_databases]]
+binding = "DB"
+database_name = "royal-roulette-db"
+
+[vars]
+# Ganti dengan alamat Cloudflare Pages Anda agar hanya situs itu yang boleh memanggil API.
+ORIGIN = "*"
+
+# Penyelesaian taruhan pemain yang sedang offline, tiap menit.
+[triggers]
+crons = ["* * * * *"]
