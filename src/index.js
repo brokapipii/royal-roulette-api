@@ -7,10 +7,10 @@ const rnd=(n=24)=>hex(crypto.getRandomValues(new Uint8Array(n)));
 const isH=s=>typeof s==='string'&&/^[0-9a-f]{64}$/.test(s);
 const normPh=s=>{let d=String(s||'').replace(/\D/g,'');if(d.startsWith('62'))d='0'+d.slice(2);return d};
 const okEm=s=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
-const REDS=new Set([1,3,5,7,9,12,14,16,18,19,21,23]);
+const REDS=new Set([1,2,3,4,9,10,11,12,17,18,19,20]);
 const KEYS=new Set(['red','black','even','odd','low','high','d1','d2','d3']);
-const wins=(k,n)=>{if(k[0]==='n')return +k.slice(1)===n;if(n===0)return false;return({red:REDS.has(n),black:!REDS.has(n),even:n%2===0,odd:n%2===1,low:n<=12,high:n>=13,d1:n<=8,d2:n>8&&n<=16,d3:n>16})[k]===true};
-const okKey=k=>typeof k==='string'&&(KEYS.has(k)||/^n(\d|1\d|2[0-4])$/.test(k));
+const wins=(k,n)=>{if(k[0]==='n')return +k.slice(1)===n;return({red:REDS.has(n),black:!REDS.has(n),even:n%2===0,odd:n%2===1,low:n<=12,high:n>=13,d1:n<=8,d2:n>8&&n<=16,d3:n>16})[k]===true};
+const okKey=k=>typeof k==='string'&&(KEYS.has(k)||/^n([1-9]|1\d|2[0-4])$/.test(k));
 const okPath=p=>typeof p==='string'&&/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(p);
 const sum=bs=>(bs||[]).reduce((s,b)=>s+b.a,0);
 const SCHEMA=[
@@ -62,7 +62,7 @@ class Api{
   /* ---------- pengaturan dan jadwal putaran ---------- */
   async cfgRaw(){const x=await this.getDoc('app/cfg');return x?(x.d.cfg||{}):{}}
   C(c){return{sec:Math.max(5,+c.sec||30),ms:Math.max(1000,+c.ms||6000),rd:Math.min(30,Math.max(0,c.rd===undefined?3:+c.rd||0)),paused:!!c.paused,maint:!!c.maint,
-    pn:c.pn===undefined?24:+c.pn,pc:c.pc===undefined?1:+c.pc,pd:c.pd===undefined?2:+c.pd,maxb:+c.maxb||0}}
+    pn:c.pn===undefined?23:+c.pn,pc:c.pc===undefined?1:+c.pc,pd:c.pd===undefined?2:+c.pd,maxb:+c.maxb||0}}
   cyc(S,now){const P=S.sec*1000+S.ms+150+S.rd*1000,e=S.pausedAt==null?now:S.pausedAt,i=Math.max(0,Math.floor((e-S.t0)/P)),start=S.t0+i*P;return{P,e,id:S.startId+i,start,close:start+S.sec*1000,rev:start+P}}
   async loadSched(now){
     let S=JSON.parse(await this.kvGet('sched')),c=this.cyc(S,now);
@@ -85,7 +85,7 @@ class Api{
   async rkey(){if(HK)return HK;HK=await crypto.subtle.importKey('raw',enc.encode(await this.kvGet('rsecret')),{name:'HMAC',hash:'SHA-256'},false,['sign']);return HK}
   async result(id){
     if(RES.has(id))return RES.get(id);
-    const g=new Uint8Array(await crypto.subtle.sign('HMAC',await this.rkey(),enc.encode('round:'+id))),n=((g[0]<<24|g[1]<<16|g[2]<<8|g[3])>>>0)%25;
+    const g=new Uint8Array(await crypto.subtle.sign('HMAC',await this.rkey(),enc.encode('round:'+id))),n=((g[0]<<24|g[1]<<16|g[2]<<8|g[3])>>>0)%24+1;
     RES.set(id,n);if(RES.size>600)RES.delete(RES.keys().next().value);return n;
   }
   async roundDoc(now){
