@@ -7,12 +7,16 @@ const rnd=(n=24)=>hex(crypto.getRandomValues(new Uint8Array(n)));
 const isH=s=>typeof s==='string'&&/^[0-9a-f]{64}$/.test(s);
 const normPh=s=>{let d=String(s||'').replace(/\D/g,'');if(d.startsWith('62'))d='0'+d.slice(2);return d};
 const okEm=s=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
-const REDS=new Set([1,2,3,4,9,10,11,12,17,18,19,20]);
+const REDS=new Set([1,4,6,7,10,11,13,16,18,19,21,24]);
 const KEYS=new Set(['red','black','even','odd','low','high','d1','d2','d3']);
 const wins=(k,n)=>{if(k[0]==='n')return +k.slice(1)===n;return({red:REDS.has(n),black:!REDS.has(n),even:n%2===0,odd:n%2===1,low:n<=12,high:n>=13,d1:n<=8,d2:n>8&&n<=16,d3:n>16})[k]===true};
 const okKey=k=>typeof k==='string'&&(KEYS.has(k)||/^n([1-9]|1\d|2[0-4])$/.test(k));
 const okPath=p=>typeof p==='string'&&/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(p);
 const sum=bs=>(bs||[]).reduce((s,b)=>s+b.a,0);
+const LVK=c=>({on:c.lvOn!==false,base:Math.max(1,+c.lvBase||100),pow:Math.max(1,+c.lvPow||1.6),max:Math.max(2,Math.min(500,+c.lvMax||100)),flat:Math.max(0,c.lvFlat===undefined?10:+c.lvFlat),chipPer:Math.max(1,+c.lvChip||10),ramp:Math.max(1,+c.lvRamp||300),twRef:Math.max(1,+c.lvTw||20000),bonus:Math.max(0,c.lvBonus===undefined?25:+c.lvBonus)});
+const lvNeed=(L,k)=>Math.round(k.base*Math.pow(L,k.pow));
+const lvOf=(xp,k)=>{let L=1,r=Math.max(0,Math.floor(xp||0));while(L<k.max&&r>=lvNeed(L,k)){r-=lvNeed(L,k);L++}return{lv:L,cur:r,need:L>=k.max?0:lvNeed(L,k)}};
+function lvCalc(d,wg,K){const add=K.on&&wg>0?Math.round((K.flat+wg/K.chipPer)*(1+Math.min(1,(d.rn||0)/K.ramp)+.5*Math.min(1,(d.tw||0)/K.twRef))):0,a0=lvOf(d.xp||0,K),a1=lvOf((d.xp||0)+add,K);let bonus=0;for(let L=a0.lv+1;L<=a1.lv;L++)bonus+=K.bonus*L;return{add,lv:a1.lv,up:a1.lv>a0.lv,bonus}}
 const SCHEMA=[
  'CREATE TABLE IF NOT EXISTS docs(path TEXT PRIMARY KEY,data TEXT NOT NULL,rev INTEGER NOT NULL,deleted INTEGER NOT NULL DEFAULT 0,owner TEXT)',
  'CREATE INDEX IF NOT EXISTS docs_rev ON docs(rev)','CREATE INDEX IF NOT EXISTS docs_owner ON docs(owner,rev)',
@@ -62,7 +66,7 @@ class Api{
   /* ---------- pengaturan dan jadwal putaran ---------- */
   async cfgRaw(){const x=await this.getDoc('app/cfg');return x?(x.d.cfg||{}):{}}
   C(c){return{sec:Math.max(5,+c.sec||30),ms:Math.max(1000,+c.ms||6000),rd:Math.min(30,Math.max(0,c.rd===undefined?3:+c.rd||0)),paused:!!c.paused,maint:!!c.maint,
-    pn:c.pn===undefined?23:+c.pn,pc:c.pc===undefined?1:+c.pc,pd:c.pd===undefined?2:+c.pd,maxb:+c.maxb||0}}
+    pn:c.pn===undefined?23:+c.pn,pc:c.pc===undefined?1:+c.pc,pd:c.pd===undefined?2:+c.pd,maxb:+c.maxb||0,lv:LVK(c)}}
   cyc(S,now){const P=S.sec*1000+S.ms+150+S.rd*1000,e=S.pausedAt==null?now:S.pausedAt,i=Math.max(0,Math.floor((e-S.t0)/P)),start=S.t0+i*P;return{P,e,id:S.startId+i,start,close:start+S.sec*1000,rev:start+P}}
   async loadSched(now){
     let S=JSON.parse(await this.kvGet('sched')),c=this.cyc(S,now);
@@ -102,7 +106,8 @@ class Api{
       const C=this.C(await this.cfgRaw()),n=await this.result(d.tgt),bs=d.bets;let g=0,net=0,wg=0;
       bs.forEach(b=>{net-=b.a;wg+=b.a;if(wins(b.k,n)){const mu=b.k[0]==='n'?C.pn:b.k[0]==='d'?C.pd:C.pc,y=b.a*(mu+1);g+=y;net+=y}});
       const t='Angka '+n+': '+(net>=0?'+':'')+net.toLocaleString('id-ID')+' chip';
-      if(await this.put('players/'+id,{...d,chips:d.chips+g,bets:[],tgt:0,last:bs,log:[{d:net,t}].concat(d.log||[]).slice(0,6),tw:(d.tw||0)+wg,tn:(d.tn||0)+net,seen:now},x.rev))return;
+      const lc=lvCalc(d,wg,C.lv),lg=[{d:net,t}];if(lc.up)lg.unshift({d:lc.bonus,t:'Naik ke level '+lc.lv+(lc.bonus?'! Bonus +'+lc.bonus.toLocaleString('id-ID')+' chip':'!')});
+      if(await this.put('players/'+id,{...d,chips:d.chips+g+lc.bonus,bets:[],tgt:0,last:bs,log:lg.concat(d.log||[]).slice(0,6),tw:(d.tw||0)+wg,tn:(d.tn||0)+net,xp:(d.xp||0)+lc.add,lv:lc.lv,rn:(d.rn||0)+(wg>0?1:0),seen:now},x.rev))return;
     }
   }
   async settleAll(now){
